@@ -1,0 +1,2 @@
+cd ~
+"Foo" > blah.txt
