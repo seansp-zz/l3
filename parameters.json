@@ -26,18 +26,6 @@
         "adminPassword": {
             "value": null
         },
-        "diagnosticsStorageAccountName": {
-            "value": "seansptest4diag322"
-        },
-        "diagnosticsStorageAccountType": {
-            "value": "Standard_LRS"
-        },
-        "diagnosticsStorageAccountKind": {
-            "value": "Storage"
-        },
-        "diagnosticsStorageAccountId": {
-            "value": "Microsoft.Storage/storageAccounts/seansptest4diag322"
-        },
         "addressPrefix": {
             "value": "10.3.12.0/24"
         },
