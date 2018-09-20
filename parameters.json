@@ -15,7 +15,7 @@
             "value": "mstest"
         },
         "virtualNetworkName": {
-            "value": "seansp-test3-vnet"
+            "value": "seansp-test4-vnet"
         },
         "networkInterfaceName": {
             "value": "srv16241"
@@ -27,7 +27,7 @@
             "value": null
         },
         "diagnosticsStorageAccountName": {
-            "value": "seansptest3diag322"
+            "value": "seansptest4diag322"
         },
         "diagnosticsStorageAccountType": {
             "value": "Standard_LRS"
@@ -36,7 +36,7 @@
             "value": "Storage"
         },
         "diagnosticsStorageAccountId": {
-            "value": "Microsoft.Storage/storageAccounts/seansptest3diag322"
+            "value": "Microsoft.Storage/storageAccounts/seansptest4diag322"
         },
         "addressPrefix": {
             "value": "10.3.12.0/24"
