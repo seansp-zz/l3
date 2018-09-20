@@ -1,1 +1,1 @@
-Install-WindowsFeature -Name Hyper-V -ComputerName -IncludeManagementTools -Restart
+Install-WindowsFeature -Name Hyper-V -ComputerName HostName -IncludeManagementTools -Restart
