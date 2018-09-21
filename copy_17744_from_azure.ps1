@@ -1,3 +1,3 @@
 $mine = New-AzureStorageContext -StorageAccountName seansp -StorageAccountKey "$args"
-$blobs = Get-AzureStorageBlob -Context $mine -Container vhdx | Select-Object -First 1
-Get-AzureStorageBlobContent -Blob $blobs.Name -Context $mine -Container vhdx -Destination C:\Users\mstest
+$blob = Get-AzureStorageBlob -Context $mine -Container vhdx | Where-Object {$_.Name -eq "Windows_InsiderPreview_Server_VHDX_17744.vhdx"}
+Get-AzureStorageBlobContent -Blob $blob.Name -Context $mine -Container vhdx -Destination C:\Users\mstest
