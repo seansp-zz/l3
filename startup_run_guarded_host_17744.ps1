@@ -269,7 +269,7 @@ if($HostNested.HostNestedSupport) {
     #Spins up VM
     try {
       New-VHD -ParentPath "C:\Users\Public\GuardedHost-17744.vhdx" -Path "C:\Virtual Machines\Delta-17744-$VMName.vhdx" -Differencing
-      New-VM -Name $VMName -MemoryStartupBytes 4GB -Generation 2 -VHDPath "C:\Virtual Machines\Delta-17744-$VMName.vhdx" -BootDevice "VHD" -Switch "IntSwitch" -Path "C:\Virtual Machines\$VMName" -ErrorAction SilentlyContinue
+      New-VM -Name $VMName -MemoryStartupBytes 8GB -Generation 2 -VHDPath "C:\Virtual Machines\Delta-17744-$VMName.vhdx" -BootDevice "VHD" -Switch "IntSwitch" -Path "C:\Virtual Machines\$VMName" -ErrorAction SilentlyContinue
 #      New-VHD -ParentPath "C:\Virtual Machines\Windows_InsiderPreview_Server_VHDX_17723.vhdx" -Path "C:\Virtual Machines\NewDelta-$VMName.vhdx" -Differencing
 #      New-VM -Name $VMName -MemoryStartupBytes 4GB -Generation 2 -VHDPath "C:\Virtual Machines\NewDelta-$VMName.vhdx" -BootDevice "VHD" -Path "C:\Virtual Machines\$VMName" -ErrorAction SilentlyContinue
       }
