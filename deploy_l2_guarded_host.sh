@@ -13,7 +13,7 @@ az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExten
 printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "Installing AzureRM Powershell Module on $1"
 az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings '{"commandToExecute":"Powershell -C \"Install-Module -Name AzureRM -Force\""}'
 printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "Copying 17744 onto test environment $1"
-az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings '{"fileUris":["https://raw.githubusercontent.com/seansp/l3/master/copy_17744_from_azure.ps1"], "commandToExecute":"Powershell -File ./copy_17744_from_azure.ps1 \"AZURESTORAGEKEY\""}'
+az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings '{"fileUris":["https://raw.githubusercontent.com/seansp/l3/master/copy_GuardedHost17744_from_azure.ps1"], "commandToExecute":"Powershell -File ./copy_GuardedHost17744_from_azure.ps1 \"AZURESTORAGEKEY\""}'
 az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings '{"fileUris":["https://raw.githubusercontent.com/seansp/l3/master/networkingv2.ps1"], "commandToExecute":"Powershell -File ./networkingv2.ps1"}'
 az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings '{"fileUris":["https://raw.githubusercontent.com/seansp/l3/master/startup_run_guarded_host_17744.ps1"], "commandToExecute":"Powershell -File ./startup_run_guarded_host_17744.ps1"}'
 printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "Finished."
