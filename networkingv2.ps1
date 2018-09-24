@@ -15,6 +15,7 @@ Set-DnsClientServerAddress -InterfaceIndex $ifIndex -ServerAddresses ("192.168.0
 #Turn on DHCP
 Install-WindowsFeature DHCP -IncludeManagementTools
 Add-DhcpServerV4Scope -Name "DHCP Scope" -StartRange 192.168.0.10 -EndRange 192.168.0.250 -SubnetMask 255.255.255.0
-Set-DhcpServerV4OptionValue -DnsServer 192.168.0.1
+Set-DhcpServerV4OptionValue -DnsServer 192.168.0.1 -DnsDomain test.local
+Set-DhcpServerV4OptionValue -ScopeId 192.168.0.0 -Router 192.168.0.1
 Restart-Service dhcpserver
 
