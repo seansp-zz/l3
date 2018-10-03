@@ -3,7 +3,7 @@ $ips = Get-VM -VMName $args | Select -ExpandProperty NetworkAdapters | Select IP
 $ipv4 = $ips.IPAddresses[0]
 $trusthosts = (Get-Item -Path WSMan:\localhost\Client\TrustedHosts).Value
 Set-Item -Path WSMan:\localhost\Client\TrustedHosts "$trusthosts, $ipv4" -Force
-$password = "p@ssw0rd124" | ConvertTo-SecureString -AsPlainText -Force
+$password = "p@ssw0rd1234" | ConvertTo-SecureString -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential -ArgumentList "mstest", $password
 
 Invoke-Command -ComputerName $ipv4 -ScriptBlock {HostName} -Credential $cred
