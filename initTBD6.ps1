@@ -15,5 +15,5 @@ try {
     Start-Process powershell.exe -ArgumentList c:\users\public\payload.ps1 -NoNewWindow -Credential $cred -RedirectStandardError c:\users\public\payload.stderr.log -RedirectStandardOutput c:\users\public\payload.stdout.log    
 }
 catch {
-    $_
+    Set-Content -Path c:\users\public\payload.catch.log -Value $_
 }
