@@ -2,7 +2,6 @@ New-VHD -ParentPath "C:\Users\Public\TBD.vhdx" -Path "C:\Users\Public\Delta-$arg
 New-VM -Name "$args" -MemoryStartupBytes 8GB -Generation 2 -VHDPath "C:\Users\Public\Delta-$args.vhdx" `
     -BootDevice "VHD" -Switch "IntSwitch" -Path "C:\Virtual Machines\$VMName" -ErrorAction SilentlyContinue
 Start-VM "$args"
-Sleep 30
 $ips = Get-VM -VMName $args | Select -ExpandProperty NetworkAdapters | Select IPAddresses 
 #$ips = Get-VM | ?{$_.Name -eq $args} | Select -ExpandProperty NetworkAdapters | Select IPAddresses
 $ipv4 = $ips.IPAddresses[0]
@@ -17,7 +16,7 @@ try {
       #"Set ComputerName $args from ToBeDetermined for $ipv4"
     Set-Content -Path $taskPath -Value $payload
 
-    $taskAction = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $taskPath
+    $taskAction = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $taskPath -WorkingDirectory c:\users\Public
     $now = [System.DateTime]::Now.AddSeconds(45)
     $taskWhen = New-ScheduledTaskTrigger -Once -At $now
 
@@ -27,5 +26,5 @@ try {
     Set-ScheduledTask -TaskName $taskName -Settings $settings
 }
 catch {
-    Set-Content -Path c:\users\public\payload.catch.log -Value $_
+    Set-Content -Path c:\users\public\$args.payload.catch.log -Value $_
 }
