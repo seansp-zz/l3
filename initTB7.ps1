@@ -12,7 +12,7 @@ try {
     $cred = New-Object System.Management.Automation.PSCredential -ArgumentList "mstest", $password
     $payload = "Invoke-Command -ComputerName $ipv4 -ScriptBlock { Rename-Computer -NewName $args -Restart -Force }"
     Set-Content -Path c:\users\public\payload.ps1 -Value $payload
-    Start-Process powershell.exe -ArgumentList c:\users\public\payload.ps1 -NoNewWindow -Credential $cred -RedirectStandardError c:\users\public\payload.stderr.log -RedirectStandardOutput c:\users\public\payload.stdout.log    
+    [System.Diagnostics.Process]::Start("powershell", "c:\users\public\payload.ps1", $cred.UserName, $cred.Password, ' ' )
 }
 catch {
     Set-Content -Path c:\users\public\payload.catch.log -Value $_
