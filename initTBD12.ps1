@@ -12,6 +12,7 @@ $taskFile += "`$trusthosts = (Get-Item -Path WSMan:\localhost\Client\TrustedHost
 $taskFile += "Set-Item -Path WSMan:\localhost\Client\TrustedHosts `"`$trusthosts, `$ipv4`" -Force"
 $taskFile += "Set-Content -Path c:\users\public\$args.renameStarted.log -Value `"Started rename for `$ipv4`""
 $taskFile += "try {"
+$taskFile += "  Enable-PSRemoting -Force"
 $taskFile += "  `$password = ConvertTo-SecureString -String `"p@ssw0rd1234`" -AsPlainText -Force"
 $taskFile += "  `$cred = New-Object System.Management.Automation.PSCredential -ArgumentList `"mstest`", `$password"
 $taskFile += "  Invoke-Command -ComputerName `$ipv4 -ScriptBlock {Rename-Computer -NewName $args -Restart -Force} -Credential `$cred"
@@ -23,16 +24,11 @@ $taskFile += "}"
 try {
     $taskPath = "C:\users\Public\$args.renameComputerTask.ps1"
     Set-Content -Path $taskPath -Value $taskFile
-    $taskName = "$args rename"
-    $taskAction = New-ScheduledTaskAction -Execute 'Powershell.exe' -Argument $taskPath -WorkingDirectory c:\users\Public
-    $now = [System.DateTime]::Now.AddSeconds(45)
-    $taskWhen = New-ScheduledTaskTrigger -Once -At $now
-
-    Register-ScheduledTask -Action $taskAction -Trigger $taskWhen -TaskName $taskName -Description "Rename Computer"
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -RestartCount 3
-    Set-ScheduledTask -TaskName $taskName -Settings $settings -User "mstest" -Password "p@ssw0rd1234"
-    Set-Content -Path c:\users\public\$args.renameTaskCreation.Created.log -Value "Task $taskName created and scheduled."
+    sleep 30
+    $credential = New-Object System.Management.Automation.PSCredential @("mstest", (ConvertTo-SecureString -String "p@ssw0rd1234" -AsPlainText -Force))
+    . $taskPath
+    Set-Content -Path c:\users\public\$args.rename.Executed.log -Value "$args has been renamed."
 }
 catch {
-    Set-Content -Path c:\users\public\$args.renameTaskCreation.catch.log -Value $_
+    Set-Content -Path c:\users\public\$args.rename.catch.log -Value $_
 }
