@@ -28,13 +28,9 @@ try {
     $now = [System.DateTime]::Now.AddSeconds(45)
     $taskWhen = New-ScheduledTaskTrigger -Once -At $now
 
-    Write-Host $taskPath
-    Write-Host $taskName
-    Write-Host $taskAction
-
-    Register-ScheduledTask -Action $taskAction -Trigger $taskWhen -TaskName $taskName -Description "Rename Computer" 
+    Register-ScheduledTask -Action $taskAction -Trigger $taskWhen -TaskName $taskName -Description "Rename Computer"
     $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 5) -RestartCount 3
-    Set-ScheduledTask -TaskName $taskName -Settings $settings
+    Set-ScheduledTask -TaskName $taskName -Settings $settings -User "mstest" -Password "p@ssw0rd1234"
     Set-Content -Path c:\users\public\$args.renameTaskCreation.Created.log -Value "Task $taskName created and scheduled."
 }
 catch {
