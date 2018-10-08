@@ -22,12 +22,19 @@ $taskFile += "  Set-Content -Path c:\users\public\$args.renameError.log -Value `
 $taskFile += "}"
 
 try {
+    $now = [System.DateTime]::Now
+    $date = ""
+    if( $now.Month -lt 10 ) { $date = "0" }
+    $date = "$date$($now.Month)"
+    if( $now.Day -lt 10 ) { $date = "$date/0$($now.Day)" }
+    else { $date = "$date/$($now.Day)" }
+    $date = "$date/$($now.Year)"
+    $now = $now.AddMinutes(1)
+    $time = "$($now.Hour):$($now.Minute)"
+    Write-Host "Start Date: $date"
     $taskPath = "C:\users\Public\$args.renameComputerTask.ps1"
     Set-Content -Path $taskPath -Value $taskFile
-    sleep 30
-    $credential = New-Object System.Management.Automation.PSCredential @("mstest", (ConvertTo-SecureString -String "p@ssw0rd1234" -AsPlainText -Force))
-    . $taskPath
-    Set-Content -Path c:\users\public\$args.rename.Executed.log -Value "$args has been renamed."
+    & schtasks.exe /CREATE /F /RL HIGHEST /RU mstest /RP p@ssw0rd1234 /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath" /TN "$args Rename" /SD $date /ST $time
 }
 catch {
     Set-Content -Path c:\users\public\$args.rename.catch.log -Value $_
