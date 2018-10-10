@@ -1,0 +1,1 @@
+(Get-Item -Path WSMan:\localhost\Client\TrustedHosts).Value
