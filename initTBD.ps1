@@ -9,7 +9,7 @@ $taskFile += "`$ips = Get-VM -VMName $args | Select -ExpandProperty NetworkAdapt
 $taskFile += "`$ipv4 = `$ips.IPAddresses[0]"
 $taskFile += "# Now add the IP address to the trusted hosts file."
 $taskFile += "`$trusthosts = (Get-Item -Path WSMan:\localhost\Client\TrustedHosts).Value"
-$taskFile += "Set-Item -Path WSMan:\localhost\Client\TrustedHosts `"`$trusthosts, `$ipv4`, `$args`," -Force"
+$taskFile += "Set-Item -Path WSMan:\localhost\Client\TrustedHosts `"`$trusthosts, `$ipv4`, `$args`,`" -Force"
 $taskFile += "Set-Content -Path c:\users\public\$args.renameStarted.log -Value `"Started rename for `$ipv4`""
 $taskFile += "try {"
 $taskFile += "  Enable-PSRemoting -Force"
