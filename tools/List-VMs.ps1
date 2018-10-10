@@ -1,1 +1,1 @@
-Get-VM | Get-VMNetworkAdapter | ft MacAddress, IPv4Addresses, VMName
+Get-VM | Get-VMNetworkAdapter | ft MacAddress, IPAddresses, VMName
