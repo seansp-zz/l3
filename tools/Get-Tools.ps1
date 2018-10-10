@@ -14,6 +14,6 @@ foreach( $tool in $tools )
     $src = wget $toolRoot/$tool
     $src = $src -replace "AUTOMATION_USERNAME", $userName
     $src = $src -replace "AUTOMATION_PASSWORD", $password
-    Set-Content -Path $tool -Value $src
+    Set-Content -Path C:\Users\Public\$tool -Value $src
 }
 Write-Host "Finished."
