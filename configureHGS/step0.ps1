@@ -1,1 +1,0 @@
-Install-WindowsFeature HostGuardianServiceRole -IncludeManagementTools -Restart
