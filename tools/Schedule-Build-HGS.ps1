@@ -2,7 +2,7 @@ Param(
     [Parameter(Mandatory=$true)][string] $VMName,
     [Parameter(Mandatory=$true)][string] $adminUsername,
     [Parameter(Mandatory=$true)][string] $adminPassword,
-    [Parameter(Mandatory=$true)][System.Int64] $memorySize )
+    [System.Int64] $memorySize = 4GB )
   
   $now = [System.DateTime]::Now
   $date = ""
@@ -18,4 +18,4 @@ Param(
   else { $time = "$time$($now.Minute)" }
   
   $taskPath = "C:\users\Public\Build-HGS.ps1"
-  & schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath -VMName $VMName -adminUsername $adminUsername -adminPassword $adminPassword -memorySize $memorySize" /TN "Build HGS on $VMName" /SD $date /ST $time
+  & schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath -VMName $VMName -adminUsername $adminUsername -adminPassword $adminPassword -memorySize $memorySize" /TN "Build Host Guardian Service AD <$VMName>" /SD $date /ST $time
