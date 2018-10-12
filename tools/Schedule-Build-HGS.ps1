@@ -18,4 +18,4 @@ Param(
   else { $time = "$time$($now.Minute)" }
   
   $taskPath = "C:\users\Public\Build-HGS.ps1"
-  & schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath -VMName $VMName -adminUsername $adminUsername -adminPassword $adminPassword -memorySize $memorySize" /TN "Build Host Guardian Service AD <$VMName>" /SD $date /ST $time
+  & schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath -VMName $VMName -adminUsername $adminUsername -adminPassword $adminPassword -memorySize $memorySize" /TN "Build Host Guardian Service AD $VMName" /SD $date /ST $time
