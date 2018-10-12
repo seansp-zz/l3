@@ -2,8 +2,11 @@ Param(
     [Parameter(Mandatory=$true)][string] $VMName,
     [Parameter(Mandatory=$true)][string] $adminUsername,
     [Parameter(Mandatory=$true)][string] $adminPassword,
-    [System.Int64]$memorySize = 4GB,
-    [string] $switchName = "IntSwitch"
+    [System.Int64]$memorySize = 8GB,
+    [string] $switchName = "IntSwitch",
+    [string] $hgsUser = "shielded\Administrator",
+    [string] $hgsPass = $adminPassword,
+    [string] $hgsName = "HGS"
 )
 
 $global:logPath = $null
@@ -132,9 +135,12 @@ function Build-NewVM {
   New-VM -Name $vmName -MemoryStartupBytes $memorySize -Generation 2 -VHDPath $pathToVHD -BootDevice VHD -SwitchName $switchName -Path "C:\Virtual Machines\$VMName"
 }
 
-Start-Notes c:\users\public\hgs.deploy.log
-$vhd = Build-NewVHDDelta -pathToSource C:\Users\Public\HGS.vhdx -vmName $VMName
+Start-Notes c:\users\public\guardedhost.deploy.log
+$vhd = Build-NewVHDDelta -pathToSource C:\Users\Public\GuardedHostBase.vhdx -vmName $VMName
 $vm = Build-NewVM -VMName $vmName -pathToVHD $vhd -memorySize $memorySize -switchName $switchName
+
+Write-Note "Turning on Virtualiztion Extensions for $VMName"
+Set-VMProcessor -VMName $VMName -ExposeVirtualizationExtensions $true
 
 Write-Note "Starting $VMName"
 Start-VM $VMName
@@ -150,70 +156,48 @@ Invoke-Command -ComputerName $ip -ScriptBlock {Rename-Computer -NewName "$args" 
 Wait-UntilVM-ShutsDown $VMName
 Wait-UntilVM-Uptime $VMName 30
 
-Write-Note "Adding HostGuardianServiceRole and Management Tools"
+Write-Note "Adding HostGuardianServiceRole, Hyper-V, HostGuardian and ManagementTools"
 $stepOne = { 
-  Install-WindowsFeature HostGuardianServiceRole -IncludeManagementTools -Restart
+  Install-WindowsFeature -Name HostGuardianServiceRole, Hyper-V, HostGuardian -IncludeManagementTools -Restart
   }
 Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepOne
+Wait-UntilVM-ShutsDown $VMName 
+Wait-UntilVM-Uptime $VMName 90
 
-Wait-UntilVM-ShutsDown $VMName
-Wait-UntilVM-Uptime $VMName 30
+$ipv4HGS = Get-IP-From-VmName $hgsName
+#Step Two
 
-Write-Note "Installing HgsServer for 'shielded.com'"
-$stepTwo = {
-  $securePass = ConvertTo-SecureString -String "$args" -AsPlainText -Force
-  Install-HgsServer -HgsDomainName "shielded.com" -SafeModeAdministratorPassword $securePass -Restart
+Write-Host "HGSPass = $hgsPass"
+Write-Host "HGSUser = $hgsUser"
+Write-Host "HGSName = $hgsName"
+Write-Host "HGSipv4 = $ipv4HGS"
+
+Write-Note "Upgrading NuGet, GuardedFabricTools"
+$stepTwoa = {
+  Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+  Install-Module -Name GuardedFabricTools -Repository PSGallery -Force
 }
-Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepTwo -ArgumentList $adminPassword
+Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepTwoa
 
+Write-Note "Setting dns to $ipv4HGS for $hgsName"
+$stepTwob = {
+  netsh interface ipv4 set dnsservers 'Ethernet 2' static $args primary
+}
+Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepTwob -ArgumentList $ipv4HGS
+
+Write-Note "Adding to 'shielded.com' domain"
+$stepTwoc = {
+  $password = ConvertTo-SecureString -String "$($args[0])" -AsPlainText -Force
+  $cred = New-Object System.Management.Automation.PSCredential -ArgumentList $($args[1]), $password
+  Add-Computer -DomainName "shielded.com" -Credential $cred -Restart
+}
+Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepTwoc -ArgumentList $hgsPass, $hgsUser
 Wait-UntilVM-ShutsDown $VMName
 Wait-UntilVM-Uptime $VMName 90
 
-$shieldedCred = Create-PSCred "shielded\Administrator" $adminPassword
-Write-Note "Using new credential : $($shieldedCred.UserName)"
-
-
-Write-Note "Creating certificates and Initialiing the HgsServer"
-#STEP 3
-$stepThree = {
-  $securePass = ConvertTo-SecureString -String "$args" -AsPlainText -Force
-  $hgs_signer_cert = New-SelfSignedCertificate -FriendlyName "HGS Signer" -DnsName "shielded.com"
-  $hgs_encrypt_cert = New-SelfSignedCertificate -FriendlyName "HGS Encrypt" -DnsName "shielded.com"
-
-  New-Item -Path "C:\PFX" -ItemType Directory
-  Export-PfxCertificate -FilePath "C:\PFX\HGS_Signer.pfx" -Cert $hgs_signer_cert -Password $securePass -Force
-  Export-PfxCertificate -FilePath "C:\PFX\HGS_Encrypt.pfx" -Cert $hgs_encrypt_cert -Password $securePass -Force
-
-  Initialize-HgsServer -LogDirectory "C:\PFX" -HgsServiceName HGS -Http -TrustActiveDirectory -SigningCertificatePath C:\PFX\HGS_Signer.pfx -SigningCertificatePassword $securePass -EncryptionCertificatePath "C:\PFX\HGS_Encrypt.pfx" -EncryptionCertificatePassword $securePass
-}
-Invoke-Command -ComputerName $ip -Credential $shieldedCred -ScriptBlock $stepThree -ArgumentList $adminPassword
-Invoke-Command -ComputerName $ip -Credential $shieldedCred -ScriptBlock $stepThree -ArgumentList $adminPassword
-
-Write-Note "Adding the Guarded Host group to $VMName."
-$stepFour = {
-  $name = 'Guarded Hosts'
-  New-ADGroup -Name $name -GroupScope Global -GroupCategory Security
-  $group = Get-ADGroup $name
-  Add-HgsAttestationHostGroup -Name $group.Name -Identifier $group.SID 
-}
-Invoke-Command -ComputerName $ip -Credential $shieldedCred -ScriptBlock $stepFour
-Write-Note "Configured. Now running diagnostics."
-Invoke-Command -ComputerName $ip -Credential $shieldedCred -ScriptBlock { Get-HgsTrace -RunDiagnostics -Detailed }
-
-#Now build the Guarded Host.
-
-  $now = [System.DateTime]::Now
-  $date = ""
-  if( $now.Month -lt 10 ) { $date = "0" }
-  $date = "$date$($now.Month)"
-  if( $now.Day -lt 10 ) { $date = "$date/0$($now.Day)" }
-  else { $date = "$date/$($now.Day)" }
-  $date = "$date/$($now.Year)"
-  $now = $now.AddMinutes(1)
-  $time = "$($now.Hour):"
-  if( $now.Hour -lt 10 ) { $time = "0$time" }
-  if( $now.Minute -lt 10) { $time = "$($time)0$($now.Minute)" }
-  else { $time = "$time$($now.Minute)" }
-  
-  $taskPath = "C:\users\Public\Build-GuardedHost.ps1"
-  & schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath -VMName GuardedHost -adminUsername $adminUsername -adminPassword $adminPassword -memorySize 8GB -hgsName $VMName" /TN "Build GuardedHost for $VMName" /SD $date /ST $time
+Write-Note "Configuring attestation Client Configuration on $vmName"
+$stepThree = { 
+    Set-HgsClientConfiguration -AttestationServerUrl 'http://hgs.shielded.com/Attestation' -KeyProtectionServerUrl 'http://hgs.shielded.com/KeyProtection'
+  }
+Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepThree
+Write-Note "All Done."

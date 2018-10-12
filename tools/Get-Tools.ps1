@@ -8,6 +8,7 @@ $tools += "Get-TrustedHosts.ps1"
 $tools += "Get-VMs.ps1"
 $tools += "Get-HostnameFromVM.ps1"
 $tools += "Build-HGS.ps1"
+$tools += "Build-GuardedHost.ps1"
 foreach( $tool in $tools )
 {
     Write-Host "Retrieving $tool to local folder."
