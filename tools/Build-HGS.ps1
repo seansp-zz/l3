@@ -214,6 +214,7 @@ Invoke-Command -ComputerName $ip -Credential $shieldedCred -ScriptBlock { Get-Hg
   if( $now.Hour -lt 10 ) { $time = "0$time" }
   if( $now.Minute -lt 10) { $time = "$($time)0$($now.Minute)" }
   else { $time = "$time$($now.Minute)" }
-  
+
+  $eightGB = 8GB
   $taskPath = "C:\users\Public\Build-GuardedHost.ps1"
-  & schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath -VMName GuardedHost -adminUsername $adminUsername -adminPassword $adminPassword -memorySize 8GB -hgsName $VMName" /TN "Build GuardedHost for $VMName" /SD $date /ST $time
+  & schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR "powershell.exe -ExecutionPolicy ByPass -File $taskPath -VMName GuardedHost -adminUsername $adminUsername -adminPassword $adminPassword -memorySize $eightGB -hgsName $VMName" /TN "Build GuardedHost for $VMName" /SD $date /ST $time
