@@ -21,6 +21,6 @@ az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExten
 printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "Getting tools."
 az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings '{"fileUris":["https://raw.githubusercontent.com/seansp/l3/master/tools/Get-Tools.ps1"], "commandToExecute":"Powershell -File ./Get-Tools.ps1"}'
 printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "Starting task to Build HGS."
-az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"commandToExecute\":\"Powershell -File c:/users/public/Schedule-Build-HGS.ps1 -VMName HGS -adminUsername $4 -adminPassword $5\"}"
+az vm extension set --resource-group $1 --vm-name srv16 --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"commandToExecute\":\"Powershell -File c:/users/public/Schedule-Build-HGS.ps1 -VMName NestedHGS -adminUsername $4 -adminPassword $5\"}"
 printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "Finished."
 
