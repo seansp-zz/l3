@@ -142,6 +142,16 @@ $vm = Build-NewVM -VMName $vmName -pathToVHD $vhd -memorySize $memorySize -switc
 Write-Note "Turning on Virtualiztion Extensions for $VMName"
 Set-VMProcessor -VMName $VMName -ExposeVirtualizationExtensions $true
 
+Write-Note "Turning on TPM with KeyProtector for $VMName"
+$guardian = Get-HgsGuardian -Name "myGuardian"
+if( !$guardian )
+{
+    $guardian = New-HgsGuardian -Name "myGuardian" -GenerateCertificates
+}
+$keyProtector = New-HgsKeyProtector -Owner $guardian -AllowUntrustedRoot
+Set-VMKeyProtector -VMName $VMName -KeyProtector $keyProtector.RawData
+Enable-VMTPM -VMName $VMName
+
 Write-Note "Starting $VMName"
 Start-VM $VMName
 
@@ -154,6 +164,15 @@ Write-Note "Renaming the VM to $VMName"
 Invoke-Command -ComputerName $ip -ScriptBlock {Rename-Computer -NewName "$args" -Restart -Force} -Credential $cred -ArgumentList $VMName
 
 Wait-UntilVM-ShutsDown $VMName
+Wait-UntilVM-Uptime $VMName 30
+
+Write-Note "Turning off DeviceGuard as a PlatformSecurityFeature."
+$stepZero = {
+  Set-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\ -Name RequirePlatformSecurityFeatures -Value 0
+  Restart-Computer -Force
+}
+Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepZero
+Wait-UntilVM-ShutsDown $VMName 
 Wait-UntilVM-Uptime $VMName 30
 
 Write-Note "Adding HostGuardianServiceRole, Hyper-V, HostGuardian and ManagementTools"

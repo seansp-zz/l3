@@ -136,6 +136,17 @@ Start-Notes c:\users\public\hgs.deploy.log
 $vhd = Build-NewVHDDelta -pathToSource C:\Users\Public\HGS.vhdx -vmName $VMName
 $vm = Build-NewVM -VMName $vmName -pathToVHD $vhd -memorySize $memorySize -switchName $switchName
 
+
+Write-Note "Turning on TPM with KeyProtector for $VMName"
+$guardian = Get-HgsGuardian -Name "myGuardian"
+if( !$guardian )
+{
+    $guardian = New-HgsGuardian -Name "myGuardian" -GenerateCertificates
+}
+$keyProtector = New-HgsKeyProtector -Owner $guardian -AllowUntrustedRoot
+Set-VMKeyProtector -VMName $VMName -KeyProtector $keyProtector.RawData
+Enable-VMTPM -VMName $VMName
+
 Write-Note "Starting $VMName"
 Start-VM $VMName
 
@@ -149,6 +160,12 @@ Invoke-Command -ComputerName $ip -ScriptBlock {Rename-Computer -NewName "$args" 
 
 Wait-UntilVM-ShutsDown $VMName
 Wait-UntilVM-Uptime $VMName 30
+
+Write-Note "Turning off IOMMU attestation requirement."
+$stepZero = {
+  Disable-HgsAttestationPolicy Hgs_IommuEnabled
+}
+Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepZero
 
 Write-Note "Adding HostGuardianServiceRole and Management Tools"
 $stepOne = { 
