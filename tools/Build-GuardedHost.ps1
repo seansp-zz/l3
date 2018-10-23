@@ -156,32 +156,29 @@ Write-Note "Starting $VMName"
 Start-VM $VMName
 
 Wait-UntilVM-Uptime $VMName 30
-$cred = Create-PSCred $adminUsername $adminPassword 
+$cred = Create-PSCred $adminUsername $adminPassword
+$hgsCred = Create-PSCred $hgsUser $hgsPass
 $ip = Get-IP-From-VmName $VMName
+$hgsIP = Get-IP-From-VmName $hgsName
+
 AddTo-TrustedHosts $ip
 
 Write-Note "Renaming the VM to $VMName"
 Invoke-Command -ComputerName $ip -ScriptBlock {Rename-Computer -NewName "$args" -Restart -Force} -Credential $cred -ArgumentList $VMName
-
-Wait-UntilVM-ShutsDown $VMName
-Wait-UntilVM-Uptime $VMName 30
-
-Write-Note "Turning off DeviceGuard as a PlatformSecurityFeature."
-$stepZero = {
-  Set-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\ -Name RequirePlatformSecurityFeatures -Value 0
-  Restart-Computer -Force
-}
-Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepZero
 Wait-UntilVM-ShutsDown $VMName 
 Wait-UntilVM-Uptime $VMName 30
 
-Write-Note "Adding HostGuardianServiceRole, Hyper-V, HostGuardian and ManagementTools"
+Write-Note "Adding Hyper-V, HostGuardian and ManagementTools"
 $stepOne = { 
-  Install-WindowsFeature -Name HostGuardianServiceRole, Hyper-V, HostGuardian -IncludeManagementTools -Restart
+  Install-WindowsFeature -Name Hyper-V, HostGuardian -IncludeManagementTools -Restart
   }
 Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepOne
-Wait-UntilVM-ShutsDown $VMName 
-Wait-UntilVM-Uptime $VMName 90
+Wait-UntilVM-ShutsDown $VMName
+Wait-UntilVM-Uptime $VMName 31
+Write-Note "Waiting until $VMName reboots again."
+Wait-UntilVM-ShutsDown $VMName
+Wait-UntilVM-Uptime $VMName 30
+#VM will shut down a second time.
 
 $ipv4HGS = Get-IP-From-VmName $hgsName
 #Step Two
@@ -191,20 +188,20 @@ Write-Host "HGSUser = $hgsUser"
 Write-Host "HGSName = $hgsName"
 Write-Host "HGSipv4 = $ipv4HGS"
 
-Write-Note "Upgrading NuGet, GuardedFabricTools"
+Write-Note "Upgrading NuGet, GuardedFabricTools on $VMName"
 $stepTwoa = {
   Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
   Install-Module -Name GuardedFabricTools -Repository PSGallery -Force
 }
 Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepTwoa
 
-Write-Note "Setting dns to $ipv4HGS for $hgsName"
+Write-Note "Setting dns to $ipv4HGS for $hgsName on $VMName"
 $stepTwob = {
   netsh interface ipv4 set dnsservers 'Ethernet 2' static $args primary
 }
 Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepTwob -ArgumentList $ipv4HGS
 
-Write-Note "Adding to 'shielded.com' domain"
+Write-Note "Adding $VMName to 'shielded.com' domain"
 $stepTwoc = {
   $password = ConvertTo-SecureString -String "$($args[0])" -AsPlainText -Force
   $cred = New-Object System.Management.Automation.PSCredential -ArgumentList $($args[1]), $password
@@ -214,9 +211,24 @@ Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepTwoc -Argum
 Wait-UntilVM-ShutsDown $VMName
 Wait-UntilVM-Uptime $VMName 90
 
+Write-Note "Adding $VMName to GuardedHosts group."
+$stepAddMember = {
+  Add-ADGroupMember "Guarded Hosts" -Members $args$ 
+}
+Invoke-Command -ComputerName $ipv4HGS -Credential $hgsCred -ScriptBlock $stepAddMember -ArgumentList $VMName
+
+Write-Note "Turning off DeviceGuard as a PlatformSecurityFeature."
+$stepZero = {
+  Set-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\ -Name RequirePlatformSecurityFeatures -Value 0
+  Restart-Computer -Force
+}
+Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepZero
+Wait-UntilVM-ShutsDown $VMName
+Wait-UntilVM-Uptime $VMName 90
+
 Write-Note "Configuring attestation Client Configuration on $vmName"
 $stepThree = { 
     Set-HgsClientConfiguration -AttestationServerUrl 'http://hgs.shielded.com/Attestation' -KeyProtectionServerUrl 'http://hgs.shielded.com/KeyProtection'
   }
-Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepThree
+Invoke-Command -ComputerName $ip -Credential $hgsCred -ScriptBlock $stepThree
 Write-Note "All Done."

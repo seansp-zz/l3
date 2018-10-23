@@ -161,12 +161,6 @@ Invoke-Command -ComputerName $ip -ScriptBlock {Rename-Computer -NewName "$args" 
 Wait-UntilVM-ShutsDown $VMName
 Wait-UntilVM-Uptime $VMName 30
 
-Write-Note "Turning off IOMMU attestation requirement."
-$stepZero = {
-  Disable-HgsAttestationPolicy Hgs_IommuEnabled
-}
-Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $stepZero
-
 Write-Note "Adding HostGuardianServiceRole and Management Tools"
 $stepOne = { 
   Install-WindowsFeature HostGuardianServiceRole -IncludeManagementTools -Restart
@@ -189,6 +183,12 @@ Wait-UntilVM-Uptime $VMName 90
 $shieldedCred = Create-PSCred "shielded\Administrator" $adminPassword
 Write-Note "Using new credential : $($shieldedCred.UserName)"
 
+
+Write-Note "Turning off IOMMU attestation requirement."
+$stepZero = {
+  Disable-HgsAttestationPolicy Hgs_IommuEnabled
+}
+Invoke-Command -ComputerName $ip -Credential $shieldedCred -ScriptBlock $stepZero
 
 Write-Note "Creating certificates and Initialiing the HgsServer"
 #STEP 3
