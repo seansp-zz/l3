@@ -9,7 +9,8 @@ Param(
     [Parameter(mandatory=$false)] [Int64]  $GhostMem = 8GB
 )
 
-Import-Module ./HyperV-DeployTestEnvironment.psm1 -Force -Global
+#TODO: Need to install my module so that I don't load it like this.
+Import-Module C:\Users\Public\HyperV-DeployTestEnvironment.psm1 -Force -Global
 Start-Notes ./LSVM.deploy.log
 $cred = Get-NewPSCred $adminUsername $adminPassword
 $shieldCred = Get-NewPSCred "$Domain\Administrator" $adminPassword

@@ -29,9 +29,14 @@ function Write-Note {
 }
 Write-Note "### Verifying successful deployment..."
 Write-Note "Hgs Deployment Log ..."
-Get-Content c:\users\public\hgs.deploy.log
+Get-Content c:\users\public\hgs.deploy.log -ErrorAction SilentlyContinue
 Write-Note "GUARDED Host Deployment LOG ..."
-Get-Content c:\users\public\guardedHost.deploy.log
+Get-Content c:\users\public\guardedHost.deploy.log -ErrorAction SilentlyContinue
+Write-Note "LSVM.deploy <--- Powershell version."
+Get-Content c:\users\public\LSVM.deploy.log
+
+## Now log into the machine and get my verification.
+
 $cred = Get-Credential -UserName "mstest" -Message "Admin Password for Guarded Host"
 $sb_verifyGuardedHost = {
     hostname
