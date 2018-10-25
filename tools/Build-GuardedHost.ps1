@@ -61,6 +61,11 @@ function Wait-UntilVM-ShutsDown {
   {
     Write-Host -NoNewline -ForegroundColor DarkCyan "."
     Sleep 3
+    if( (Get-VM -VMName $VMName).Uptime.TotalSeconds -gt 300 )
+    {
+      Write-Note "Waited for 300 seconds.  Asserting we already shutdown and have rebooted."
+      break
+    }
   }
   Write-Host -ForegroundColor Cyan "Done."
   Write-Note "$vmName has shut down."
