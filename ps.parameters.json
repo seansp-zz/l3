@@ -1,0 +1,48 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "value": "resourceGroupName"
+        },
+        "virtualMachineName": {
+            "value": "srv16"
+        },
+        "virtualMachineSize": {
+            "value": "Standard_E4s_v3"
+        },
+        "adminUsername": {
+            "value": "mstest"
+        },
+        "virtualNetworkName": {
+            "value": "seansp-test4-vnet"
+        },
+        "networkInterfaceName": {
+            "value": "srv16241"
+        },
+        "networkSecurityGroupName": {
+            "value": "srv16-nsg"
+        },
+        "adminPassword": {
+            "value": null
+        },
+        "addressPrefix": {
+            "value": "10.3.12.0/24"
+        },
+        "subnetName": {
+            "value": "default"
+        },
+        "subnetPrefix": {
+            "value": "10.3.12.0/24"
+        },
+        "publicIpAddressName": {
+            "value": "srv16-ip"
+        },
+        "publicIpAddressType": {
+            "value": "Dynamic"
+        },
+        "publicIpAddressSku": {
+            "value": "Basic"
+        }
+    }
+}
