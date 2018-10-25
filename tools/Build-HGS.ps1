@@ -58,6 +58,11 @@ function Wait-UntilVM-ShutsDown {
   {
     Write-Host -NoNewline -ForegroundColor DarkCyan "."
     Sleep 3
+    if( (Get-VM -VMName $VMName).Uptime.TotalSeconds -gt 300 )
+    {
+      Write-Note "Waited for 300 seconds.  Asserting we already shutdown and have rebooted."
+      break
+    }
   }
   Write-Host -ForegroundColor Cyan "Done."
   Write-Note "$vmName has shut down."
@@ -181,7 +186,7 @@ Wait-UntilVM-ShutsDown $VMName
 Wait-UntilVM-Uptime $VMName 90
 
 $shieldedCred = Create-PSCred "shielded\Administrator" $adminPassword
-Write-Note "Using new credential : $($shieldedCred.UserName)"
+Write-Note "Using new credential : shielded\Administrator"
 
 Write-Note "Creating certificates and Initializing the HgsServer"
 #STEP 3
