@@ -1,7 +1,7 @@
 Param(
     [Parameter(mandatory=$false)] [string] $HGSName = "NestedHGS",
     [Parameter(mandatory=$false)] [Int64]  $hgsMem = 4GB,
-    [Parameter(mandatory=$false)] [Int64]  $switchName = "IntSwitch",
+    [Parameter(mandatory=$false)] [string]  $switchName = "IntSwitch",
     [Parameter(mandatory=$false)] [string] $Domain = "shielded",
     [Parameter(mandatory=$true)]  [string] $adminPassword,
     [Parameter(mandatory=$false)] [string] $GhostName = "GuardedHost",

@@ -1,10 +1,11 @@
 Param(
-    [Parameter(mandatory=$true)]  [string] $HGSName,
+    [Parameter(mandatory=$false)]  [string] $HGSName = "NestedHGS",
     [Parameter(mandatory=$false)] [Int64]  $hgsMem = 4GB,
-    [Parameter(mandatory=$false)] [Int64]  $switchName = "IntSwitch",
+    [Parameter(mandatory=$false)] [string]  $switchName = "IntSwitch",
     [Parameter(mandatory=$false)] [string] $Domain = "shielded",
+    [Parameter(mandatory=$false)] [string] $adminUsername = "mstest",
     [Parameter(mandatory=$true)]  [string] $adminPassword,
-    [Parameter(mandatory=$true)]  [string] $GhostName,
+    [Parameter(mandatory=$false)]  [string] $GhostName = "GuardedHost",
     [Parameter(mandatory=$false)] [Int64]  $GhostMem = 8GB
 )
 
@@ -30,33 +31,33 @@ Enable-VMTPM -VMName $HGSName
 Write-Note "Starting $HGSName"
 Start-VM $HGSName
 
-Wait-UntilVM-Uptime $HGSName 30
+Wait-UntilVMUptime $HGSName 30
 $hgsip = Get-IPFromVmName $HGSName
 Write-Note "Adding $hgsip for $HGSName to Trusted Hosts."
 Add-ToTrustedHosts $hgsip
 
 Write-Note "Renaming the VM to $HGSName"
-Invoke-Command -ComputerName $ip -ScriptBlock {Rename-Computer -NewName "$args" -Restart -Force} -Credential $cred -ArgumentList $VMName
-Wait-UntilVM-ShutsDown $HGSName
+Invoke-Command -ComputerName $hgsip -ScriptBlock {Rename-Computer -NewName "$args" -Restart -Force} -Credential $cred -ArgumentList $HGSName
+Wait-UntilVMShutsDown $HGSName
 
-Wait-UntilVM-Uptime $HGSName 30
+Wait-UntilVMUptime $HGSName 30
 Write-Note "Adding HostGuardianServiceRole and Management Tools"
 $hgsInstallWindowsFeature = { 
   Install-WindowsFeature HostGuardianServiceRole -IncludeManagementTools -Restart
   }
 Invoke-Command -ComputerName $hgsip -Credential $cred -ScriptBlock $hgsInstallWindowsFeature
-Wait-UntilVM-ShutsDown $HGSName
+Wait-UntilVMShutsDown $HGSName
 
-Wait-UntilVM-Uptime $HGSName 30
+Wait-UntilVMUptime $HGSName 30
 Write-Note "Installing HgsServer for '$Domain.com'"
 $hgsInstallHGSServer = {
   $securePass = ConvertTo-SecureString -String "$($args[0])" -AsPlainText -Force
   Install-HgsServer -HgsDomainName "$($args[1]).com" -SafeModeAdministratorPassword $securePass -Restart
 }
 Invoke-Command -ComputerName $hgsip -Credential $cred -ScriptBlock $hgsInstallHGSServer -ArgumentList $adminPassword, $Domain
-Wait-UntilVM-ShutsDown $HGSName
+Wait-UntilVMShutsDown $HGSName
 
-Wait-UntilVM-Uptime $HGSName 90
+Wait-UntilVMUptime $HGSName 90
 Write-Note "Creating certificates and Initializing the HgsServer"
 $hgsInitializeHgsServer = {
   $securePass = ConvertTo-SecureString -String "$($args[0])" -AsPlainText -Force
@@ -101,19 +102,19 @@ $ghostip = Get-IPFromVmName $GhostName
 Add-ToTrustedHosts $ghostip
 Write-Note "Renaming the VM to $GhostName"
 Invoke-Command -ComputerName $ghostip -ScriptBlock {Rename-Computer -NewName "$args" -Restart -Force} -Credential $cred -ArgumentList $GhostName
-Wait-UntilVM-ShutsDown $GhostName 
-Wait-UntilVM-Uptime $GhostName 30
+Wait-UntilVMShutsDown $GhostName 
+Wait-UntilVMUptime $GhostName 30
 
 Write-Note "Adding Hyper-V, HostGuardian and ManagementTools"
 $ghostInstallWindowsFeature = { 
   Install-WindowsFeature -Name Hyper-V, HostGuardian -IncludeManagementTools -Restart
   }
 Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostInstallWindowsFeature
-Wait-UntilVM-ShutsDown $ghostName
-Wait-UntilVM-Uptime $ghostName 31
+Wait-UntilVMShutsDown $ghostName
+Wait-UntilVMUptime $ghostName 31
 Write-Note "Waiting until $ghostName reboots again."
-Wait-UntilVM-ShutsDown $ghostName
-Wait-UntilVM-Uptime $ghostName 30
+Wait-UntilVMShutsDown $ghostName
+Wait-UntilVMUptime $ghostName 30
 #VM will shut down a second time.
 
 Write-Note "Upgrading NuGet, GuardedFabricTools on $GhostName"
@@ -121,7 +122,7 @@ $ghostInstallModuleFabric = {
   Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
   Install-Module -Name GuardedFabricTools -Repository PSGallery -Force
 }
-Invoke-Command -ComputerName $ip -Credential $cred -ScriptBlock $ghostInstallModuleFabric
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostInstallModuleFabric
 
 Write-Note "Setting dns to $hgsip for $hgsName on $GhostName"
 $ghostAddDNS = {
@@ -136,8 +137,8 @@ $ghostJoinDomain = {
   Add-Computer -DomainName "$($args[2]).com" -Credential $cred -Restart
 }
 Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $stepTwoc -ArgumentList $adminPassword, "$Domain\Administrator", $Domain
-Wait-UntilVM-ShutsDown $GhostName
-Wait-UntilVM-Uptime $GhostName 90
+Wait-UntilVMShutsDown $GhostName
+Wait-UntilVMUptime $GhostName 90
 
 Write-Note "Adding $GHostName to 'Guarded Hosts' group on $HGSName"
 $hgsAddMember = {
