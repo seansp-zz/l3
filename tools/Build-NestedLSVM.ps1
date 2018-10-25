@@ -10,8 +10,12 @@ Param(
 )
 
 #TODO: Need to install my module so that I don't load it like this.
-Import-Module C:\Users\Public\HyperV-DeployTestEnvironment.psm1 -Force -Global
+#TODO: Install won't correct my output path.  Temp 'HACK' is to change my folder.
+#      This should be replaced with a query to get the run location from the library.
+Set-Location -Path c:\users\public
+Import-Module ./HyperV-DeployTestEnvironment.psm1 -Force -Global
 Start-Notes ./LSVM.deploy.log
+
 $cred = Get-NewPSCred $adminUsername $adminPassword
 $shieldCred = Get-NewPSCred "$Domain\Administrator" $adminPassword
 
@@ -19,7 +23,7 @@ Write-Note "Starting with the Host Guardian Service on $HGSName"
 #Build-HGS
 Write-Note "Building the VM for $HGSName"
 $hgsVhd = Build-NewVHDDelta -pathToSource C:\Users\Public\HGS.vhdx -vmName $HGSName
-$hgsVM = Build-NewVM -VMName $HGSName -pathToVHD $hgsVhd -memorySize $hgsMem -switchName $switchName
+Build-NewVM -VMName $HGSName -pathToVHD $hgsVhd -memorySize $hgsMem -switchName $switchName
 Write-Note "Turning on TPM with KeyProtector for $HGSName"
 $guardian = Get-HgsGuardian -Name "myGuardian"
 if( !$guardian )
@@ -84,7 +88,7 @@ Invoke-Command -ComputerName $hgsip -Credential $shieldCred -ScriptBlock $hgsDis
 #Build Guarded Host
 
 $ghostvhd = Build-NewVHDDelta -pathToSource C:\Users\Public\GuardedHostBase.vhdx -vmName $GhostName
-$ghostvm = Build-NewVM -VMName $GhostName -pathToVHD $ghostvhd -memorySize $GhostMem -switchName $switchName
+Build-NewVM -VMName $GhostName -pathToVHD $ghostvhd -memorySize $GhostMem -switchName $switchName
 
 Write-Note "Turning on Virtualiztion Extensions for $GhostName"
 Set-VMProcessor -VMName $GhostName -ExposeVirtualizationExtensions $true
@@ -94,12 +98,12 @@ Write-Note "Turning on TPM with KeyProtector for $GhostName"
 $keyProtector = New-HgsKeyProtector -Owner $guardian -AllowUntrustedRoot
 Set-VMKeyProtector -VMName $GhostName -KeyProtector $keyProtector.RawData
 Enable-VMTPM -VMName $GhostName
-
 Write-Note "Starting $GhostName"
 Start-VM $GhostName
-
-Wait-UntilVMUptime $GhostName 30
+#ToDO: How do I know it is ready for networking?
+Wait-UntilVMUptime $GhostName 45
 $ghostip = Get-IPFromVmName $GhostName
+Write-Note "Got $GhostName at $ghostip"
 Add-ToTrustedHosts $ghostip
 Write-Note "Renaming the VM to $GhostName"
 Invoke-Command -ComputerName $ghostip -ScriptBlock {Rename-Computer -NewName "$args" -Restart -Force} -Credential $cred -ArgumentList $GhostName
