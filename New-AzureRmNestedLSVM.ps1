@@ -39,10 +39,11 @@ New-AzureRmResourceGroupDeployment -Name "LSVM-$ResourceGroupName" -ResourceGrou
   -resourceGroupNameFromTemplate $ResourceGroupName -TemplateParameterFile ".\$ResourceGroupName.json" -ErrorAction Stop
 
 Write-Note "Now the VM has been deployed."
+
 Write-Note "Using Custom Script Extensions to: Install Hyper-V using bootstrap from azure."
 Set-AzureRmVMCustomScriptExtension -ResourceGroupName $ResourceGroupName `
-    -VMName srv16 -Location $Location -FileUri "https://raw.githubusercontent.com/charlieding/Virtualization-Documentation/live/hyperv-tools/Nested/NVMBootstrap_WinServer16.ps1" `
-    -Run "NVMBootstrap_WinServer16.ps1" `
+    -VMName srv16 -Location $Location -FileUri "https://raw.githubusercontent.com/seansp/l3/master/Install-HyperV-Reboot.ps1" `
+    -Run "Install-HyperV-Reboot.ps1" `
     -Name CustomScriptExtension
 
 Write-Note "Installing NuGet/AzureRM via CustomScriptExtension."
