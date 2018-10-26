@@ -85,6 +85,6 @@ Set-AzureRmVMCustomScriptExtension -ResourceGroupName $ResourceGroupName `
     -VMName srv16 -Location $Location -FileUri "c:\users\public\Schedule-Build-NestedLSVM.ps1" `
     -Run "C:\users\public\schedule-build-NestedLSVM.ps1" -Argument $taskArgs -Name CustomScriptExtension
 
+$ip = (Get-AzureRmPublicIpAddress -Name srv16-ip -ResourceGroupName $ResourceGroupName).IpAddress
 
-
-Write-Note "Finished."
+Write-Note "Finished with Azure steps. VM is running a scheduled task at $ip and will be complete in ~20 minutes."
