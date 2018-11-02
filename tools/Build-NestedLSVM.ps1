@@ -46,16 +46,9 @@ Invoke-Command -ComputerName $hgsip -ScriptBlock {Rename-Computer -NewName "$arg
 Wait-UntilVMShutsDown $HGSName
 
 Wait-UntilVMUptime $HGSName 30
-Write-Note "Adding HostGuardianServiceRole and Management Tools"
-$hgsInstallWindowsFeature = { 
-  Install-WindowsFeature HostGuardianServiceRole -IncludeManagementTools -Restart
-  }
-Invoke-Command -ComputerName $hgsip -Credential $cred -ScriptBlock $hgsInstallWindowsFeature
-Wait-UntilVMShutsDown $HGSName
-
-Wait-UntilVMUptime $HGSName 30
-Write-Note "Installing HgsServer for '$Domain.com'"
+Write-Note "Installing HostGuardianServiceRole and HgsServer for '$Domain.com'"
 $hgsInstallHGSServer = {
+  Install-WindowsFeature HostGuardianServiceRole -IncludeManagementTools
   $securePass = ConvertTo-SecureString -String "$($args[0])" -AsPlainText -Force
   Install-HgsServer -HgsDomainName "$($args[1]).com" -SafeModeAdministratorPassword $securePass -Restart
 }
