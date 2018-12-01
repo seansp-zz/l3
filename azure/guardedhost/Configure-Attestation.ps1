@@ -4,7 +4,7 @@ $cred = New-Object System.Management.Automation.PSCredential -ArgumentList $($ar
 $ghostHgsClientConfiguration = { 
     Set-HgsClientConfiguration -AttestationServerUrl "http://hgs.$args.com/Attestation" -KeyProtectionServerUrl "http://hgs.$args.com/KeyProtection"
 }
-Invoke-Command -Credential $cred -ScriptBlock $ghostHgsClientConfiguration -ArgumentList $args[2]
+Invoke-Command -ComputerName localhost -Credential $cred -ScriptBlock $ghostHgsClientConfiguration -ArgumentList $($args[2])
 
 
 #Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostJoinDomain -ArgumentList $adminPassword, "$Domain\Administrator", $Domain
