@@ -3,7 +3,7 @@ echo "Making group.  DNSName=lsvmtst$5"
 az group create --name $1 --location $2 
 sed -e "s/REGION_NAME/$2/g" -e "s/RESOURCE_GROUP_NAME/$1/g" -e "s/DNS_PREFIX/lsvmtst$5/g" ./jenkins/parameters.json > ./jenkinsParameters.json
 sed -e "s/REGION_NAME/$2/g" -e "s/RESOURCE_GROUP_NAME/$1/g" ./hgs/parameters.json > ./hgsParameters.json
-sed -e "s/REGION_NAME/$2/g" -e "s/RESOURCE_GROUP_NAME/$1/g" ./guardedHost/parameters.json > ./guardedHostParameters.json
+sed -e "s/REGION_NAME/$2/g" -e "s/RESOURCE_GROUP_NAME/$1/g" ./guardedhost/parameters.json > ./guardedHostParameters.json
 
 echo "-- Making Jenkins."
 az group deployment create --name "DeployJenkins" --resource-group "$1" --template-file ./jenkins/template.json --parameters @./jenkinsParameters.json adminPassword=$3 > azure.$1.deploy.jenkins.json
@@ -21,7 +21,7 @@ az vm extension set --resource-group $1 --vm-name myhgs --name CustomScriptExten
 az vm extension set --resource-group $1 --vm-name myhgs --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/hgs/ConfigureHGS-Step1.ps1\"], \"commandToExecute\":\"Powershell -File ./ConfigureHGS-Step1.ps1 \\\"$3\\\" \\\"$4\\\"\"}"
 
 echo "Making the Guarded Host"
-az group deployment create --name "DeployGuardedHost" --resource-group "$1" --template-file ./guardedHost/template.json --parameters @./guardedHostParameters.json adminPassword=$3
+az group deployment create --name "DeployGuardedHost" --resource-group "$1" --template-file ./guardedhost/template.json --parameters @./guardedHostParameters.json adminPassword=$3
 
 echo "-- Adding Microsoft.LSG.Utilities Module to GuardedHost"
 az vm extension set --resource-group $1 --vm-name guardedhost --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/Install-PowershellHelpers.ps1\"], \"commandToExecute\":\"Powershell -File ./Install-PowershellHelpers.ps1\"}"
