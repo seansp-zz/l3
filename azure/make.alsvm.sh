@@ -47,16 +47,36 @@ az vm extension set --resource-group $1 --vm-name myhgs --name CustomScriptExten
 echo "-- Adding Guarded Host to the AttestationHostGroup"
 az vm extension set --resource-group $1 --vm-name myhgs --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/hgs/AddGroupMember.ps1\"], \"commandToExecute\":\"Powershell -File ./AddGroupMember.ps1 $3 $4\\mstest $4\"}"
 echo "-- Disabling the DeviceGuard on the Guarded Host."
-az vm extension set --resource-group $1 --vm-name GuardedHost --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/guardedhost/DisableDeviceGuard.ps1\"], \"commandToExecute\":\"Powershell -File ./DisableDeviceGuard.ps1 $3 $4\\mstest $4\"}"
+az vm extension set --resource-group $1 --vm-name guardedhost --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/guardedhost/DisableDeviceGuard.ps1\"], \"commandToExecute\":\"Powershell -File ./DisableDeviceGuard.ps1 $3 $4\\mstest $4\"}"
 
 echo "-- Setting Attestation for Guarded Host"
 az vm extension set --resource-group $1 --vm-name guardedhost --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/guardedhost/Configure-Attestation.ps1\"], \"commandToExecute\":\"Powershell -File ./Configure-Attestation.ps1 $3 $4\\mstest $4\"}"
 
+echo "-- Installing Java on HGS"
+az vm extension set --resource-group $1 --vm-name myHgs --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/Install-Java.ps1\"], \"commandToExecute\":\"Powershell -File ./Install-Java.ps1\"}"
+echo "-- Installing Java on GuardedHost"
+az vm extension set --resource-group $1 --vm-name guardedhost --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/Install-Java.ps1\"], \"commandToExecute\":\"Powershell -File ./Install-Java.ps1\"}"
+
+
+echo "------- Installing OpenSSH on HGS"
+az vm extension set --resource-group $1 --vm-name myhgs --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/Install-OpenSSHServer.ps1\"], \"commandToExecute\":\"Powershell -File ./Install-OpenSSHServer.ps1\"}"
+
+echo "------- Installing OpenSSH on Guarded Host"
+az vm extension set --resource-group $1 --vm-name guardedhost --name CustomScriptExtension --publisher Microsoft.Compute --settings "{\"fileUris\":[\"https://raw.githubusercontent.com/seansp/l3/master/azure/Install-OpenSSHServer.ps1\"], \"commandToExecute\":\"Powershell -File ./Install-OpenSSHServer.ps1\"}"
+
+
 echo "--------------- DONE configuring HGS and Guarded Host."
+
+
+
+
 
 myHGSIP="$(az vm list-ip-addresses -g $1 -n myHgs | grep ipAddress | sed -e 's/\"ipAddress\"://g' | tr -d '\"' | tr -d ',' | tr -d '[:space:]')"
 GhostIP="$(az vm list-ip-addresses -g $1 -n GuardedHost | grep ipAddress | sed -e 's/\"ipAddress\"://g' | tr -d '\"' | tr -d ',' | tr -d '[:space:]')"
 JenkinsIP="$(az vm list-ip-addresses -g $1 -n Jenkins | grep ipAddress | sed -e 's/\"ipAddress\"://g' | tr -d '\"' | tr -d ',' | tr -d '[:space:]')"
+
+
+
 
 echo "The RG:$1 is up. Some manual steps are required."
 echo "The Domain Controller 'myHGS' for $4.com -- $myHGSIP"
