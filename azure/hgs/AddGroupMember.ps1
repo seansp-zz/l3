@@ -1,5 +1,10 @@
 Import-Module C:\users\public\Microsoft.LSG.Utilities.psm1 -Force
 Start-LSGNotes -path c:\users\public\AddGroupMember.log
+if( -not $? )
+{
+    $issue = $Error[0].Exception.Message
+    Write-LSGNote "ERROR::$issue"
+}
 
 Write-LSGNote "building password"
 $password = ConvertTo-SecureString -String "$($args[0])" -AsPlainText -Force
