@@ -1,6 +1,7 @@
 # Microsoft.LSG.Utilities
 #
 
+$global:LSG_ReuseLog = $false
 $global:LSG_logPath = $null
 $global:LSG_startTime = [DateTime]::Now 
 function Restart-LSGClock { 
@@ -25,6 +26,12 @@ function Start-LSGNotes {
     )
   $now = [System.DateTime]::Now
   $message = "[$now] $init"
-  Set-Content -Path $path -Value $message -Force
-  $global:LSG_logPath = $path
+  if( [System.IO.File]::Exists( $path ) -and !$global:LSG_ReuseLog )
+  {
+    Start-LSGNotes "$($path).log" "$init -> found prior $path w/o Global:LSG_ReuseLog set.  Appending .log"
+  }
+  else {
+    Set-Content -Path $path -Value $message -Force
+    $global:LSG_logPath = $path
+  }
 }
