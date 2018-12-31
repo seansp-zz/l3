@@ -1,0 +1,123 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>SourceVM</name>
+          <description>The source VM that has been prepared to create a template.</description>
+          <defaultValue>ubuntu16.04.5</defaultValue>
+          <trim>true</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>GuardedHost</name>
+          <description>The guarded host that will be used to provision the shielded template.</description>
+          <defaultValue></defaultValue>
+          <trim>true</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <assignedNode>managementPC</assignedNode>
+  <canRoam>false</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.plugins.powershell.PowerShell plugin="powershell@1.3">
+      <command>if ($env:PROCESSOR_ARCHITEW6432 -eq &quot;AMD64&quot;) {
+    if ($myInvocation.Line) {
+       Write-Host &quot;This one.&quot;
+        &amp;&quot;$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe&quot; -NonInteractive -NoProfile $myInvocation.Line
+    }else{
+        &amp;&quot;$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe&quot; -NonInteractive -NoProfile -file &quot;$($myInvocation.InvocationName)&quot; $args
+    }
+    Write-Host &quot;Switched returning with ExitCode: $lastexitcode&quot;
+    exit $lastexitcode
+}
+
+
+$vmName = $env:SourceVM
+$guardedHost = $env:GuardedHost
+
+Set-Location -Path c:\users\public
+Import-Module ./HyperV-DeployTestEnvironment.psm1 -Force -Global
+Start-Notes ./Template.Creation.$VMName.log
+
+$vm = Get-VM -Name $vmName
+
+Write-Note &quot;Getting boot drive for $vmName&quot;
+# Get boot vhdx
+$bootDrive = Get-VMHardDiskDrive -vmName $vmName -ControllerLocation 0 -ControllerNumber 0 -ControllerType &apos;SCSI&apos;
+# Check boot order
+Write-Note &quot;Checking boot order.&quot;
+$bootOrder = $(Get-VMFirmware -vmName $vmName).BootOrder
+if ($bootOrder[0].BootType -eq &apos;File&apos;) {
+    Write-Note &quot;Boot order needs to update to vhdx.&quot; ([System.ConsoleColor]::Yellow)
+    # Set first boot device to above vhdx
+    Set-VMFirmware -vmName $vmName -FirstBootDevice $bootDrive
+}
+Write-Note &quot;Copying to the template folder.&quot;
+# Copy to template-prepare folder.
+$templateFolder = &quot;c:\users\public\template&quot;
+$originalVHDX = $bootDrive.Path
+$filename = Split-Path $originalVHDX -Leaf
+$newFilename = Join-Path -Path $templateFolder -ChildPath &quot;Template-$filename&quot;
+if( Test-Path $newFilename )
+{
+  Write-Note &quot;Previous version found. Deleting.&quot; ([System.ConsoleColor]::Yellow)
+  Remove-Item $newFilename -Force
+}
+Copy-Item -Path $originalVHDX -Destination $newFilename -Force
+Write-Note &quot;Copy completed for: $newFilename&quot;
+
+
+Write-Note &quot;Get the key I made.&quot;
+$cert = Get-Item Cert:\LocalMachine\My\EFA806AACF58685AC881F43013685E194A2862DF
+Write-Note &quot;Protecting the TemplateDisk...&quot;
+Protect-TemplateDisk -Path $newFilename -TemplateName $vmName -Version 1.0.0.0 -Certificate $cert -ProtectedTemplateTargetDiskType PreprocessedLinux
+if (-not $?) {
+    Write-Note &quot;Error: FAILED to create the template disk.&quot; ([System.ConsoleColor]::Red)
+    return $false
+}
+
+$vscFilename = &quot;$newFilename.vsc&quot;
+Write-Note &quot;Saving the VSC... to $vscFilename&quot;
+Save-VolumeSignatureCatalog -TemplateDiskPath $newFilename -VolumeSignatureCatalogPath $vscFilename
+# Getting previously configured owner and test fabric guardians.
+Write-Note &quot;Getting Signing Guardian.&quot;
+$owner = Get-HgsGuardian -Name &quot;Owner&quot;
+Write-Note &quot;Getting Test Fabric&quot;
+$guardian = Get-HgsGuardian -Name &quot;Test Fabric&quot;
+$vidq = New-VolumeIDQualifier -VolumeSignatureCatalogFilePath $vscFilename -VersionRule Equals
+$shieldDataFilePath = &quot;$newFilename.pdk&quot;
+Write-Note &quot;Creating new shielded Data File -- $shieldDataFilePath&quot;
+New-ShieldingDataFile -ShieldingDataFilePath $shieldDataFilePath -Owner $owner -Guardian $Guardian -VolumeIDQualifier $vidq -WindowsUnattendFile C:\users\public\template\Windows_unattend_file.xml -policy EncryptionSupported
+
+$GuardedHostIP = Get-IPFromVmName $GuardedHost
+$templateName = Split-Path $newFilename -Leaf
+$vscName = Split-Path $vscFilename -Leaf
+$spdkName = Split-Path $shieldDataFilePath -Leaf
+Write-Note &quot;Copying template to Guarded Host.&quot;
+Copy-Item -Path &quot;C:\Users\Public\template\templatedisksignature.pfx&quot; -Destination &quot;\\$GuardedHostIP\managementPC\templatedisksignature.pfx&quot;
+Copy-Item -Path &quot;C:\Users\Public\template\Create-PreShieldedVM.ps1&quot; -Destination &quot;\\$GuardedHostIP\managementPC\Create-PreShieldedVM.ps1&quot;
+Copy-Item -Path &quot;C:\Users\Public\template\Provision-PreShieldedVM.ps1&quot; -Destination &quot;\\$GuardedHostIP\managementPC\Provision-PreShieldedVM.ps1&quot;
+Copy-Item -Path &quot;C:\Users\Public\template\Provision-PreShieldedVM.ps1&quot; -Destination &quot;\\$GuardedHostIP\managementPC\Provision-PreShieldedVM.ps1&quot;
+Copy-Item -Path &quot;C:\Users\Public\HyperV-DeployTestEnvironment.psm1&quot; -Destination &quot;\\$GuardedHostIP\managementPC\HyperV-DeployTestEnvironment.psm1.ps1&quot;
+
+Copy-Item -Path $newFilename -Destination &quot;\\$GuardedHostIP\managementPC\$templateName&quot;
+Copy-Item -Path $vscFilename -Destination &quot;\\$GuardedHostIP\managementPC\$vscName&quot;
+Copy-Item -Path $shieldDataFilePath -Destination &quot;\\$GuardedHostIP\managementPC\$spdkName&quot;</command>
+    </hudson.plugins.powershell.PowerShell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.8.10"/>
+  </buildWrappers>
+</project>

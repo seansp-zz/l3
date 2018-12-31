@@ -1,0 +1,143 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>NewVMName</name>
+          <description>The name of the newly created (shielded) VM.</description>
+          <defaultValue>testVM</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>TemplateName</name>
+          <description>The shielded template to provision.
+</description>
+          <defaultValue>ubuntu16.04.5</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <assignedNode>ghost</assignedNode>
+  <canRoam>false</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.plugins.powershell.PowerShell plugin="powershell@1.3">
+      <command>if ($env:PROCESSOR_ARCHITEW6432 -eq &quot;AMD64&quot;) {
+    if ($myInvocation.Line) {
+       Write-Host &quot;This one.&quot;
+        &amp;&quot;$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe&quot; -NonInteractive -NoProfile $myInvocation.Line
+    }else{
+        &amp;&quot;$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe&quot; -NonInteractive -NoProfile -file &quot;$($myInvocation.InvocationName)&quot; $args
+    }
+    Write-Host &quot;Switched returning with ExitCode: $lastexitcode&quot;
+    exit $lastexitcode
+} 
+
+
+
+
+$vmName = $env:NewVMName
+$templateName = &quot;Template-&quot; + $env:TemplateName + &quot;.vhdx&quot;
+
+Set-Location c:\managementPC
+
+
+## Works when this isn&apos;t done?
+#Write-Host &quot;Importing Certificate.&quot;
+#Import-PfxCertificate -FilePath &quot;c:\managementPC\templatedisksignature.pfx&quot; -CertStoreLocation Cert:\LocalMachine\My -Password $env:Password
+
+Write-Host &quot;Creating VM $vmName from $templateName&quot;
+
+$templateDiskPath = &quot;c:\managementPC\$templateName&quot;
+
+$defaultPath = $(Get-VMHost).VirtualMachinePath
+Write-Host &quot;The default path for HyperV is $defaultPath&quot;
+$VMPath = &quot;$defaultPath\$VMName&quot;
+$VMDisk = &quot;$VMPath\disk.vhdx&quot;
+$fskPath = &quot;$VMPath\vmspecdatafile.fsk&quot;
+
+Write-Host &quot;Purging old VMPath: $VMPath&quot;
+Remove-Item -Path $VMPath -Recurse -Force
+New-Item -ItemType Directory -Path $VMPath -Force
+Write-Host &quot;Creating new VM Specialization File -- $fskPath&quot;
+New-ShieldedVMSpecializationDataFile -ShieldedVMSpecializationDataFilePath $fskPath -SpecializationDataPairs @{ &apos;@ComputerName@&apos; = &quot;$VMName&quot;; &apos;@TimeZone@&apos; = &apos;Pacific Standard Time&apos; }
+Write-Host &quot;Copying template disk to $VMDisk&quot;
+Copy-Item -path $templateDiskPath -Destination $VMDisk
+Write-Host &quot;Creating the VM.&quot;
+$vm = New-VM -Name $VMName -Generation 2 -VHDPath $VMDisk -MemoryStartupBytes 2GB -Path $VMPath -SwitchName &apos;IntSwitch&apos;
+
+sleep 5
+
+$keyPath = &quot;c:\managementPC\$templateName.pdk&quot;
+
+$defaultPath = $(Get-VMHost).VirtualMachinePath
+Write-Note &quot;The default path for HyperV is $defaultPath&quot;
+$VMPath = &quot;$defaultPath\$VMName&quot;
+$VMDisk = &quot;$VMPath\disk.vhdx&quot;
+$fskPath = &quot;$VMPath\vmspecdatafile.fsk&quot;
+
+$vm = Get-VM $vmName
+
+Write-Host &quot;Setting secure boot to OpenSourceShieldedVM&quot;
+Set-VMFirmware -VM $vm -SecureBootTemplate OpenSourceShieldedVM
+Write-Host &quot;Creating KeyProtector using key -- $keyPath&quot;
+$kp = Get-KeyProtectorFromShieldingDataFile -ShieldingDataFilePath $keyPath
+Write-Host &quot;Assigning KeyProtector to $vmName&quot;
+$kpTest = Set-VMKeyProtector -VM $vm -KeyProtector $kp
+
+Write-Host &quot;Setting the PDK security policy.&quot;
+# Set PDK security policy
+$importpdk = Invoke-CimMethod -ClassName  Msps_ProvisioningFileProcessor -Namespace root\msps -MethodName PopulateFromFile -Arguments @{FilePath=$keyPath }
+$cimvm = Get-CimInstance  -Namespace root\virtualization\v2 -Class Msvm_ComputerSystem -Filter &quot;ElementName = &apos;$VMName&apos;&quot;
+$vsd = Get-CimAssociatedInstance -InputObject $cimvm -ResultClassName &quot;Msvm_VirtualSystemSettingData&quot;
+$vmms = gcim -Namespace root\virtualization\v2 -ClassName Msvm_VirtualSystemManagementService
+$ssd = Get-CimAssociatedInstance -InputObject $vsd -ResultClassName &quot;Msvm_SecuritySettingData&quot;
+$ss = Get-CimAssociatedInstance -InputObject $cimvm -ResultClassName &quot;Msvm_SecuritySErvice&quot;
+$cimSerializer = [Microsoft.Management.Infrastructure.Serialization.CimSerializer]::Create()
+$ssdString = [System.Text.Encoding]::Unicode.GetString($cimSerializer.Serialize($ssd, [Microsoft.Management.Infrastructure.Serialization.InstanceSerializationOptions]::None))
+$result = Invoke-CimMethod -InputObject $ss -MethodName SetSecurityPolicy -Arguments @{&quot;SecuritySettingData&quot;=$ssdString;&quot;SecurityPolicy&quot;=$importPdk.ProvisioningFile.PolicyData}
+
+Write-Host &quot;Enabling the VMTPM.&quot;
+$vtpmTest = Enable-VMTPM -vm $vm
+Write-Host &quot;Intializing the ShieldedVM...&quot;
+$vmTest = Initialize-ShieldedVM -VM $vm -ShieldingDataFilePath $keyPath -ShieldedVMSpecializationDataFilePath $fskPath
+
+
+  $test = $false
+  while( !$test )
+  {
+    $progress = $(Get-ShieldedVMProvisioningStatus $vmName).PercentComplete
+    Write-Host &quot;Current Progress ... $progress&quot;
+    sleep 5
+    if( $progress -eq 100 )
+    {
+      $test = $true
+      Write-Host &quot;Done.&quot;
+      Write-Host $(Get-ShieldedVMProvisioningStatus $vmName).JobStatus
+    }
+  }</command>
+    </hudson.plugins.powershell.PowerShell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.17">
+      <bindings>
+        <org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordMultiBinding>
+          <credentialsId>defaultAdmin</credentialsId>
+          <usernameVariable>Credential</usernameVariable>
+          <passwordVariable>Password</passwordVariable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordMultiBinding>
+      </bindings>
+    </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
+  </buildWrappers>
+</project>

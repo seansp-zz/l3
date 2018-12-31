@@ -1,0 +1,388 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<project>
+  <actions/>
+  <description></description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <hudson.model.ParametersDefinitionProperty>
+      <parameterDefinitions>
+        <hudson.model.StringParameterDefinition>
+          <name>VMName</name>
+          <description></description>
+          <defaultValue>bar</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+        <hudson.model.StringParameterDefinition>
+          <name>DomainName</name>
+          <description></description>
+          <defaultValue>shielded</defaultValue>
+          <trim>false</trim>
+        </hudson.model.StringParameterDefinition>
+      </parameterDefinitions>
+    </hudson.model.ParametersDefinitionProperty>
+  </properties>
+  <scm class="hudson.scm.NullSCM"/>
+  <canRoam>true</canRoam>
+  <disabled>false</disabled>
+  <blockBuildWhenDownstreamBuilding>false</blockBuildWhenDownstreamBuilding>
+  <blockBuildWhenUpstreamBuilding>false</blockBuildWhenUpstreamBuilding>
+  <triggers/>
+  <concurrentBuild>false</concurrentBuild>
+  <builders>
+    <hudson.plugins.powershell.PowerShell plugin="powershell@1.3">
+      <command>Import-Module c:/users/public/HyperV-DeployTestEnvironment.psm1 -Force -Global
+Set-Location c:/users/public
+Start-Notes ./Build-Ghost.$env:VMName.log
+
+## Assert x64 PowerShell
+if ($env:PROCESSOR_ARCHITEW6432 -eq &quot;AMD64&quot;) {
+    Write-Note &quot;Switching to AMD64&quot;
+    if ($myInvocation.Line) {
+       Write-Note &quot;This one.&quot;
+        &amp;&quot;$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe&quot; -NonInteractive -NoProfile $myInvocation.Line
+    }else{
+       Write-Note &quot;That one.&quot;
+        &amp;&quot;$env:WINDIR\sysnative\windowspowershell\v1.0\powershell.exe&quot; -NonInteractive -NoProfile -file &quot;$($myInvocation.InvocationName)&quot; $args
+    }
+    Write-Note &quot;Switched returning with ExitCode: $lastexitcode&quot;
+    exit $lastexitcode
+}
+
+$ghostName = &quot;$($env:VMName)&quot;
+
+$cred = Get-NewPSCred &quot;$($env:Credential)&quot; &quot;$($env:Password)&quot;
+$shieldCred = Get-NewPSCred &quot;$($env:DomainCredential)&quot; &quot;$($env:DomainPassword)&quot;
+$adminPassword = &quot;$($env:Password)&quot;
+
+$switchName = &quot;IntSwitch&quot;
+$GhostMem = 8GB
+
+$guardian = Get-HgsGuardian -Name &quot;myGuardian&quot;
+if( !$guardian )
+{
+    $guardian = New-HgsGuardian -Name &quot;myGuardian&quot; -GenerateCertificates
+}
+
+$ghostvhd = Build-NewVHDDelta -pathToSource C:\Users\Public\GuardedHostBase.vhdx -vmName $GhostName
+Build-NewVM -VMName $GhostName -pathToVHD $ghostvhd -memorySize $GhostMem -switchName $switchName
+
+Write-Note &quot;Turning on Virtualiztion Extensions for $GhostName&quot;
+Set-VMProcessor -VMName $GhostName -ExposeVirtualizationExtensions $true
+
+Write-Note &quot;Turning on TPM with KeyProtector for $GhostName&quot;
+#TODO: Do I really need a second one? What does this impact?  Seems fine reusing.
+$keyProtector = New-HgsKeyProtector -Owner $guardian -AllowUntrustedRoot
+Set-VMKeyProtector -VMName $GhostName -KeyProtector $keyProtector.RawData
+Enable-VMTPM -VMName $GhostName
+Write-Note &quot;Starting $GhostName&quot;
+Start-VM $GhostName
+
+
+#ToDO: How do I know it is ready for networking?
+Wait-UntilVMUptime $GhostName 45
+$ghostip = Get-IPFromVmName $GhostName
+Write-Note &quot;Got $GhostName at $ghostip&quot;
+Add-ToTrustedHosts $ghostip
+Write-Note &quot;Renaming the VM to $GhostName&quot;
+Invoke-Command -ComputerName $ghostip -ScriptBlock {Rename-Computer -NewName &quot;$args&quot; -Restart -Force} -Credential $cred -ArgumentList $GhostName
+
+Wait-UntilVMShutsDown $GhostName 
+Wait-UntilVMUptime $GhostName 30
+
+Write-Note &quot;Adding Hyper-V, HostGuardian and ManagementTools&quot;
+$ghostInstallWindowsFeature = { 
+  Install-WindowsFeature -Name Hyper-V, HostGuardian -IncludeManagementTools -Restart
+  }
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostInstallWindowsFeature
+Wait-UntilVMShutsDown $ghostName
+Wait-UntilVMUptime $ghostName 5
+Write-Note &quot;Waiting until $ghostName reboots again.&quot;
+#VM will shut down a second time.
+Wait-UntilVMShutsDown $ghostName
+Wait-UntilVMUptime $ghostName 30
+
+
+Write-Note &quot;Setting dns to 10.50.10.50 for $GhostName&quot;
+$ghostAddDNS = {
+  netsh interface ipv4 set dnsservers &apos;Ethernet 2&apos; static $args primary
+}
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostAddDNS -ArgumentList &quot;10.50.10.50&quot;
+
+Write-Note &quot;Upgrading NuGet, GuardedFabricTools on $GhostName&quot;
+$ghostInstallModuleFabric = {
+  Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+  Install-Module -Name GuardedFabricTools -Repository PSGallery -Force
+}
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostInstallModuleFabric
+
+$installJava = {
+Write-Host &quot;Downloading the Java installer.&quot;
+Set-Location -Path c:\users\public
+if( -not $? )
+{
+    $issue = $Error[0].Exception.Message
+    Write-Host &quot;ERROR::$issue&quot;
+}
+wget https://javadl.oracle.com/webapps/download/AutoDL?BundleId=235725_2787e4a523244c269598db4e85c51e0c -OutFile ./Install-Java8.exe
+if( -not $? )
+{
+    $issue = $Error[0].Exception.Message
+    Write-Host &quot;ERROR::$issue&quot;
+}
+$config = 
+&quot;
+INSTALL_SILENT=Enable
+INSTALLDIR=C:\java\jre
+WEB_JAVA_SECURITY_LEVEL=H
+&quot;
+Write-Host &quot;Creating Java.Config&quot;
+Set-Content java.config -Value $config
+if( -not $? )
+{
+    $issue = $Error[0].Exception.Message
+    Write-Host &quot;ERROR::$issue&quot;
+}
+Write-Host &quot;Installing Java...&quot;
+$javaLog = &quot;c:\users\public\Java-Installation-Log.log&quot;
+./Install-Java8.exe INSTALLCFG=c:\users\public\java.config /L $javaLog 
+if( -not $? )
+{
+    $issue = $Error[0].Exception.Message
+    Write-Host &quot;ERROR::$issue&quot;
+}
+
+Write-Host &quot;Java installing in the background. Log is : $javaLog&quot;
+while( -not (Test-Path &quot;c:\java\jre\bin&quot;) )
+{
+  Write-Host &quot;Java isn&apos;t present yet.&quot;
+  Sleep(15)
+}
+Write-Host &quot;Creating Jenkins directory&quot;
+mkdir c:\jenkins
+mkdir c:\jenkins\jdk
+Write-Host &quot;Copying contents.&quot;
+copy-item -Path c:\java\jre -Destination c:\jenkins\jdk -Recurse -Container
+Write-Host &quot;All done with Java.&quot;
+}
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $installJava
+
+$scheduledOpenSSH = {
+Write-Host &quot;This will create a file using the following scriptblock.&quot;
+
+$installOpenSSH = {
+Write-Host &quot;Adding the Windows Capability for OpenSSH.Server~~~~0.0.1.0&quot;
+Add-WindowsCapability -Online -Name OpenSSH.Server~~~~0.0.1.0
+if( -not $? )
+{
+    $error
+}
+Write-Host &quot;Setting startup Type to Automatic&quot;
+Get-Service -Name *ssh* | Set-Service -StartupType Automatic
+if( -not $? )
+{
+    $issue = $Error[0].Exception.Message
+    Write-Host &quot;ERROR::$issue&quot;
+}
+
+Write-Host &quot;Starting the service.&quot;
+Get-Service -Name *ssh* | Start-Service
+if( -not $? )
+{
+    $issue = $Error[0].Exception.Message
+    Write-Host &quot;ERROR::$issue&quot;
+}
+Write-Host &quot;All done SSH&quot;
+Restart-Computer -Force
+}
+$installOpenSSH | Out-String -Width 4096 | Out-File c:\users\public\installOpenSSH.ps1
+Write-Host &quot;Scriptblock written.&quot;
+
+
+$adminUsername = $args[0]
+$adminPassword = $args[1]
+  
+  $now = [System.DateTime]::Now
+Write-Host &quot;Setting up a scheduled Event.&quot;
+Write-Host $now
+
+  $date = &quot;&quot;
+  if( $now.Month -lt 10 ) { $date = &quot;0&quot; }
+  $date = &quot;$date$($now.Month)&quot;
+  if( $now.Day -lt 10 ) { $date = &quot;$date/0$($now.Day)&quot; }
+  else { $date = &quot;$date/$($now.Day)&quot; }
+  $date = &quot;$date/$($now.Year)&quot;
+  $now = $now.AddMinutes(2)
+  $time = &quot;$($now.Hour):&quot;
+  if( $now.Hour -lt 10 ) { $time = &quot;0$time&quot; }
+  if( $now.Minute -lt 10) { $time = &quot;$($time)0$($now.Minute)&quot; }
+  else { $time = &quot;$time$($now.Minute)&quot; }
+
+Write-Host &quot;Event Date: $date&quot;
+Write-Host &quot;Event Time: $time&quot;
+
+  $taskPath = &quot;c:\users\public\installOpenSSH.ps1&quot;
+  &amp; schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR &quot;powershell.exe -ExecutionPolicy ByPass -File $taskPath&quot; /TN &quot;Configure OpenSSH.&quot; /SD $date /ST $time
+}
+
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $scheduledOpenSSH -ArgumentList $env:Credential, $env:Password
+Write-Note &quot;Awaiting OpenSSH completion.&quot;
+Wait-UntilVMShutsDown $GhostName
+Wait-UntilVMUptime $GhostName 30
+
+$hgsName = &quot;NestedHGS&quot;
+$hgsip = Get-IPFromVmName $hgsName
+
+$Domain = &quot;shielded&quot;
+
+Write-Note &quot;Setting dns to $hgsip for $hgsName on $GhostName&quot;
+$ghostAddDNS = {
+  netsh interface ipv4 set dnsservers &apos;Ethernet 2&apos; static $args primary
+}
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostAddDNS -ArgumentList $hgsip
+
+
+Write-Note &quot;Rebooting with new DNS&quot;
+$rebootAfterDNS = {
+  Restart-Computer -Force
+}
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $rebootAfterDNS
+Wait-UntilVMShutsDown $GhostName
+Wait-UntilVMUptime $GhostName 30
+
+Write-Note &quot;Adding $GhostName to &apos;$Domain.com&apos; domain&quot;
+$ghostJoinDomain = {
+  $password = ConvertTo-SecureString -String &quot;$($args[0])&quot; -AsPlainText -Force
+  $domainCred = New-Object System.Management.Automation.PSCredential -ArgumentList $($args[1]), $password
+  Add-Computer -DomainName &quot;$($args[2]).com&quot; -Credential $domainCred -Restart
+}
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostJoinDomain -ArgumentList &quot;$adminPassword&quot;, &quot;$Domain\Administrator&quot;, &quot;$Domain&quot;
+Wait-UntilVMShutsDown $GhostName
+Wait-UntilVMUptime $GhostName 30
+
+$User = &quot;Shielded\Administrator&quot;
+$PWord = ConvertTo-SecureString -String &quot;p@ssw0rd1234&quot; -AsPlainText -Force
+$Credential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $User, $PWord
+
+Write-Note &quot;Adding $GHostName to &apos;Guarded Hosts&apos; group on $HGSName&quot;
+$hgsAddMember = {
+  Add-ADGroupMember &quot;Guarded Hosts&quot; -Members $args$ 
+}
+Invoke-Command -ComputerName $hgsip -Credential $shieldCred -ScriptBlock $hgsAddMember -ArgumentList $GhostName
+
+Write-Note &quot;Turning off DeviceGuard as a PlatformSecurityFeature.&quot;
+$ghostDisableDeviceGuard = {
+  Set-ItemProperty -Path HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\ -Name RequirePlatformSecurityFeatures -Value 0
+  Restart-Computer -Force
+}
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $ghostDisableDeviceGuard
+Wait-UntilVMShutsDown $GhostName
+Wait-UntilVMUptime $GhostName 30
+
+Write-Note &quot;Configuring attestation Client Configuration on $ghostName&quot;
+$ghostHgsClientConfiguration = { 
+    Set-HgsClientConfiguration -AttestationServerUrl &quot;http://hgs.$args.com/Attestation&quot; -KeyProtectionServerUrl &quot;http://hgs.$args.com/KeyProtection&quot;
+  }
+Invoke-Command -ComputerName $ghostip -Credential $shieldCred -ScriptBlock $ghostHgsClientConfiguration -ArgumentList $Domain
+
+## Now add the DHCP and the Network Share
+$scheduledDHCPandShare = {
+Write-Host &quot;This will create a file using the following scriptblock.&quot;
+
+$installDHCPandShare = {
+
+## First create the internal switch.
+New-VMSwitch -SwitchName &quot;IntSwitch&quot; -SwitchType Internal
+$switchAdapter = Get-NetAdapter | Where-Object {$_.ifAlias -eq &quot;vEthernet (IntSwitch)&quot;}
+$ifIndex = $switchAdapter.ifIndex
+New-NetIPAddress -IPAddress 192.168.10.1 -PrefixLength 24 -InterfaceIndex $ifIndex
+# Configure the NAT.
+New-NetNat -Name &quot;myNATnet&quot; -InternalIPInterfaceAddressPrefix 192.168.10.0/24
+# Turn on PING
+netsh advfirewall firewall add rule name=&quot;ICMP Allow incoming V4 echo request&quot; protocol=icmpv4:8,any dir=in action=allow
+# Enable DNS
+dism.exe /online /enable-feature /featurename:DNS-Server-Full-Role /featurename:DNS-Server-Tools
+Add-DnsServerForwarder -IPAddress 10.50.10.50 -PassThru
+Set-DnsClientServerAddress -InterfaceIndex $ifIndex -ServerAddresses (&quot;192.168.10.1&quot;)
+#Turn on DHCP
+Install-WindowsFeature DHCP -IncludeManagementTools
+Add-DhcpServerV4Scope -Name &quot;DHCP Scope&quot; -StartRange 192.168.10.10 -EndRange 192.168.10.250 -SubnetMask 255.255.255.0
+Set-DhcpServerV4OptionValue -DnsServer 10.50.10.50 -DnsDomain test.local
+Set-DhcpServerV4OptionValue -ScopeId 192.168.10.0 -Router 192.168.10.1
+
+
+$dnsName = &quot;$($env:COMPUTERNAME).$($env:USERDNSDOMAIN)&quot;
+Write-Host &quot;DNS Name = $dnsName&quot;
+Write-Host &quot;Adding security groups.&quot;
+Add-DhcpServerSecurityGroup -ComputerName $dnsName
+   if( -not $? )
+   {
+      $issue = $Error[0].Exception.Message
+      Write-Host &quot;ERROR::$issue&quot;
+   }
+   Write-Host &quot;Add DhcpServerInDC&quot;
+   Add-DhcpServerInDC -DnsName $dnsName -IPAddress 192.168.10.1
+   if( -not $? )
+   {
+      $issue = $Error[0].Exception.Message
+      Write-Host &quot;ERROR::$issue&quot;
+   }
+Restart-Service dhcpserver
+Write-Host &quot;Now adding managementPC share.&quot;
+New-Item -ItemType Directory -Path C:\managementPC
+New-SmbShare -Name &quot;managementPC&quot; -FullAccess &quot;Everyone&quot; -Path C:\managementPC
+
+Restart-Computer -Force
+}
+$installDHCPandShare | Out-String -Width 4096 | Out-File c:\users\public\installDHCPandShare.ps1
+Write-Host &quot;Scriptblock written.&quot;
+
+
+$adminUsername = $args[0]
+$adminPassword = $args[1]
+  
+  $now = [System.DateTime]::Now
+Write-Host &quot;Setting up a scheduled Event.&quot;
+Write-Host $now
+
+  $date = &quot;&quot;
+  if( $now.Month -lt 10 ) { $date = &quot;0&quot; }
+  $date = &quot;$date$($now.Month)&quot;
+  if( $now.Day -lt 10 ) { $date = &quot;$date/0$($now.Day)&quot; }
+  else { $date = &quot;$date/$($now.Day)&quot; }
+  $date = &quot;$date/$($now.Year)&quot;
+  $now = $now.AddMinutes(2)
+  $time = &quot;$($now.Hour):&quot;
+  if( $now.Hour -lt 10 ) { $time = &quot;0$time&quot; }
+  if( $now.Minute -lt 10) { $time = &quot;$($time)0$($now.Minute)&quot; }
+  else { $time = &quot;$time$($now.Minute)&quot; }
+
+Write-Host &quot;Event Date: $date&quot;
+Write-Host &quot;Event Time: $time&quot;
+
+  $taskPath = &quot;c:\users\public\installDHCPandShare.ps1&quot;
+  &amp; schtasks.exe /CREATE /F /RL HIGHEST /RU $adminUsername /RP $adminPassword /SC ONCE /S LocalHost /TR &quot;powershell.exe -ExecutionPolicy ByPass -File $taskPath&quot; /TN &quot;Configure DHCP.&quot; /SD $date /ST $time
+}
+
+Invoke-Command -ComputerName $ghostip -Credential $cred -ScriptBlock $scheduledDHCPandShare -ArgumentList $env:DomainCredential, $env:DomainPassword
+Write-Note &quot;Ready for Key and Templates.&quot;</command>
+    </hudson.plugins.powershell.PowerShell>
+  </builders>
+  <publishers/>
+  <buildWrappers>
+    <org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper plugin="credentials-binding@1.17">
+      <bindings>
+        <org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordMultiBinding>
+          <credentialsId>defaultAdmin</credentialsId>
+          <usernameVariable>Credential</usernameVariable>
+          <passwordVariable>Password</passwordVariable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordMultiBinding>
+        <org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordMultiBinding>
+          <credentialsId>shieldAdmin</credentialsId>
+          <usernameVariable>DomainCredential</usernameVariable>
+          <passwordVariable>DomainPassword</passwordVariable>
+        </org.jenkinsci.plugins.credentialsbinding.impl.UsernamePasswordMultiBinding>
+      </bindings>
+    </org.jenkinsci.plugins.credentialsbinding.impl.SecretBuildWrapper>
+    <hudson.plugins.timestamper.TimestamperBuildWrapper plugin="timestamper@1.8.10"/>
+  </buildWrappers>
+</project>
